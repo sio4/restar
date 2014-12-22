@@ -1,8 +1,7 @@
-package so.sauru.web.utils;
+package so.sauru.web.restar;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -18,6 +17,8 @@ import org.apache.logging.log4j.Logger;
 
 public abstract class Router extends HttpServlet {
 	private static final long serialVersionUID = 1L;
+	private static final String restarVersionString = "RESTar/0.0.1";
+	private static final String routerVersionString = "Router/0.0.1";
 	private String packageName;
 	private String cPackageName;
 
@@ -34,6 +35,8 @@ public abstract class Router extends HttpServlet {
 	}
 
 	private Class<?> getClazz(String pName, String cName) {
+		if (cName == null)
+			return null;
 		cName = cName.substring(0, 1).toUpperCase() + cName.substring(1);
 		cName = pName + "." + cName;
 		try {
@@ -56,6 +59,7 @@ public abstract class Router extends HttpServlet {
 		public RestRequest(String pathInfo) throws ServletException {
 			Matcher matcher;
 			String rem = pathInfo;
+			extension = "html";
 
 			matcher = regexExt.matcher(rem);
 			if (matcher.find()) {
@@ -63,7 +67,7 @@ public abstract class Router extends HttpServlet {
 				rem = matcher.group(1);
 				logger.trace("extension '" + extension + "' provided.");
 			} else {
-				logger.trace("no extension found. use default.");
+				logger.trace("no extension found. use default. " + extension);
 			}
 
 			int i = 0;
@@ -78,7 +82,7 @@ public abstract class Router extends HttpServlet {
 					break;
 				}
 			}
-			logger.debug("ctrlMap has " + ctrlMap.size() + "elements.");
+			logger.trace("ctrlMap has " + ctrlMap.size() + " elements.");
 
 			switch (ctrlMap.size()) {
 			case 4:
@@ -119,19 +123,24 @@ public abstract class Router extends HttpServlet {
 		}
 	}
 
-	private Object getData(Class<?> ctrl, HashMap<String, String> params) {
+	private Object getData(Class<?> ctrl, HashMap<String, Object> params) {
 		if (ctrl == null) {
 			return null;
 		} else {
 			try {
 				Controller o = (Controller) ctrl.newInstance();
-				logger.debug("new instance of " + o.getClass().getName());
-				return o.index(params.get("id"));
+				logger.trace("new instance of " + o.getClass().getName());
+				return o.index(params);
 			} catch (InstantiationException | IllegalAccessException e) {
 				e.printStackTrace();
 			}
 		}
 		return null;
+	}
+
+	@Override
+	public String toString() {
+		return restarVersionString + "\n" + routerVersionString + "\n";
 	}
 
 	/**
@@ -146,37 +155,54 @@ public abstract class Router extends HttpServlet {
 		out.println("pathinfo: " + req.getPathInfo());
 		out.println("params: " + req.getParameterMap());
 
+		if (req.getPathInfo().equals("/")) {
+			resp.resetBuffer();
+			out.println(this.toString());
+			out.close();
+			return;
+		}
+
 		try {
 			RestRequest resources = new RestRequest(req.getPathInfo());
 			HashMap<String, Object> data = new HashMap<String, Object>();
-			HashMap<String, String> params = new HashMap<String, String>();
+			HashMap<String, Object> params = new HashMap<String, Object>();
 			String cid = resources.getCId();
 			String sid = resources.getSId();
-			logger.trace("C:" + controller.getSimpleName() + "/" + cid);
-			logger.trace("S:" + scope.getSimpleName() + "/" + sid);
 			Object o;
 
-			params.put("id", sid);
-			params.put("sid", sid);
-			o = getData(scope, params);
-			if (o instanceof ArrayList) {
-				data.put(controller.getSimpleName().toLowerCase(), o);
-			} else if (o instanceof HashMap<?, ?>) {
-				data.putAll((Map<? extends String, ? extends Object>) o);
+			if (scope != null) {
+				logger.trace("S:" + scope.getSimpleName() + "/" + sid);
+				params.put("id", sid);
+				params.put("response", data);
+				o = getData(scope, params);
+				logger.trace("returns " + o.getClass().getSimpleName());
+				if (o instanceof HashMap<?, ?>) {
+					data.putAll((Map<? extends String, ? extends Object>) o);
+				}
+				params.clear();
+
+				params.put("sid", sid);
+				params.put("response", data);
+				params.put("scope_name", scope.getSimpleName().toLowerCase());
 			}
 
-			params.put("id", cid);
-			params.put("sid", sid);
-			o = getData(controller, params);
-			if (o instanceof ArrayList) {
-				data.put(controller.getSimpleName().toLowerCase(), o);
-			} else if (o instanceof HashMap<?, ?>) {
-				data.putAll((Map<? extends String, ? extends Object>) o);
+			if (controller != null) {
+				logger.trace("C:" + controller.getSimpleName() + "/" + cid);
+				params.put("id", cid);
+				params.put("response", data);
+				o = getData(controller, params);
+				logger.trace("returns " + o.getClass().getSimpleName());
+				if (o instanceof HashMap<?, ?>) {
+					data.putAll((Map<? extends String, ? extends Object>) o);
+				}
 			}
-			out.println(data);
+			params.put("path", req.getPathInfo());
+
+			out.println(params);
 
 			if (extension.compareTo("json") == 0) {
-				req.setAttribute("data", data);
+				resp.resetBuffer();
+				req.setAttribute("data", params);
 				req.getRequestDispatcher("/JsonWriter").forward(req, resp);
 			}
 		} catch (ServletException e) {

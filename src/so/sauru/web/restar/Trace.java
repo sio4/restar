@@ -1,7 +1,7 @@
 /**
  * 
  */
-package so.sauru.web.utils;
+package so.sauru.web.restar;
 
 import java.text.SimpleDateFormat;
 import java.util.TimeZone;
