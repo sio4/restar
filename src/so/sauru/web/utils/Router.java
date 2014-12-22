@@ -2,14 +2,13 @@ package so.sauru.web.utils;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
-import javax.servlet.ServletRegistration;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -19,23 +18,53 @@ import org.apache.logging.log4j.Logger;
 
 public abstract class Router extends HttpServlet {
 	private static final long serialVersionUID = 1L;
+	private String packageName;
+	private String cPackageName;
+
+	private Class<?> controller;
+	private Class<?> scope;
+	private String extension = "html";
 
 	Logger logger = LogManager.getLogger("Router");
-	ServletContext ctx;
-	Map<String, ? extends ServletRegistration> sRegist;
+
+	public Router() {
+		super();
+		this.packageName = this.getClass().getPackage().getName();
+		this.cPackageName = packageName + ".controller";
+	}
+
+	private Class<?> getClazz(String pName, String cName) {
+		cName = cName.substring(0, 1).toUpperCase() + cName.substring(1);
+		cName = pName + "." + cName;
+		try {
+			return Class.forName(cName);
+		} catch (ClassNotFoundException e) {
+			return null;
+		}
+	}
 
 	public class RestRequest {
+		private Pattern regexExt = Pattern.compile("(.+)\\.([A-z]+)");
 		private Pattern regexPath = Pattern.compile("/([^/?]+)(.*)");
 		private HashMap<Integer, String> ctrlMap = new HashMap<Integer, String>();
 
-		private String scope = null;
-		private String scope_id = null;
-		private String id = "*";
-		private String controller = null;
+		private String scopeName = null;
+		private String ctrlName = null;
+		private String sid = null;
+		private String cid = "*";
 
 		public RestRequest(String pathInfo) throws ServletException {
 			Matcher matcher;
 			String rem = pathInfo;
+
+			matcher = regexExt.matcher(rem);
+			if (matcher.find()) {
+				extension = matcher.group(2);
+				rem = matcher.group(1);
+				logger.trace("extension '" + extension + "' provided.");
+			} else {
+				logger.trace("no extension found. use default.");
+			}
 
 			int i = 0;
 			while (rem.length() > 0) {
@@ -53,62 +82,65 @@ public abstract class Router extends HttpServlet {
 
 			switch (ctrlMap.size()) {
 			case 4:
-				id = ctrlMap.get(3);
+				cid = ctrlMap.get(3);
 			case 3:
-				controller = ctrlMap.get(2);
-				scope_id = ctrlMap.get(1);
-				scope = ctrlMap.get(0);
-				break;	// break for 4 and 3. 4 includes 3.
+				ctrlName = ctrlMap.get(2);
+				sid = ctrlMap.get(1);
+				scopeName = ctrlMap.get(0);
+				break; // break for 4 and 3. 4 includes 3.
 			case 2:
-				id = ctrlMap.get(1);
+				cid = ctrlMap.get(1);
 			case 1:
-				controller = ctrlMap.get(0);
-				break;	// break for 2 and 1. 2 includes 1.
+				ctrlName = ctrlMap.get(0);
+				break; // break for 2 and 1. 2 includes 1.
 			}
 
-			if (controller != null && sRegist.containsKey(controller)) {
-				if (scope == null || sRegist.containsKey(scope)) {
-					logger.info("handle " + controller + "/" + id + ", scope: "
-							+ scope + "/" + scope_id);
+			controller = getClazz(cPackageName, ctrlName);
+			scope = getClazz(cPackageName, scopeName);
+			if (ctrlName != null && controller != null) {
+				if (scopeName == null || scope != null) {
 					return;
 				} else {
 					logger.error("Invalid URI(s) " + pathInfo);
-					throw new ServletException("Invalid URI " + pathInfo);
+					throw new ServletException("Invalid URI(s) " + pathInfo);
 				}
 			} else {
 				logger.error("Invalid URI(c) " + pathInfo);
-				throw new ServletException("Invalid URI " + pathInfo);
+				throw new ServletException("Invalid URI(c) " + pathInfo);
 			}
 		}
 
-		public String getControllerName() {
-			return controller;
+		public String getCId() {
+			return cid;
 		}
 
-		public String getId() {
-			return id;
+		public String getSId() {
+			return sid;
 		}
+	}
 
-		public String getScope() {
-			return scope;
+	private Object getData(Class<?> ctrl, HashMap<String, String> params) {
+		if (ctrl == null) {
+			return null;
+		} else {
+			try {
+				Controller o = (Controller) ctrl.newInstance();
+				logger.debug("new instance of " + o.getClass().getName());
+				return o.index(params.get("id"));
+			} catch (InstantiationException | IllegalAccessException e) {
+				e.printStackTrace();
+			}
 		}
-
-		public String getScopeId() {
-			return scope_id;
-		}
+		return null;
 	}
 
 	/**
 	 * @see HttpServlet#doGet(HttpServletRequest, HttpServletResponse)
 	 */
+	@SuppressWarnings("unchecked")
 	@Override
 	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
-		ctx = getServletContext();
-		sRegist = ctx.getServletRegistrations();
-
-		logger.debug("servlets: " + sRegist.keySet());
-
 		PrintWriter out = resp.getWriter();
 		out.println("GET request handling");
 		out.println("pathinfo: " + req.getPathInfo());
@@ -116,16 +148,37 @@ public abstract class Router extends HttpServlet {
 
 		try {
 			RestRequest resources = new RestRequest(req.getPathInfo());
-			String controller = resources.getControllerName();
-			String cid = resources.getId();
-			String scope = resources.getScope();
-			String sid = resources.getScopeId();
-			out.println("Controller " + controller + " for " + cid + " selected.");
-			out.println("  in Scope " + scope + " for " + sid + " selected.");
-			out.println("Scope -----------------");
-			ctx.getNamedDispatcher(scope).include(req, resp);
-			out.println("Controller -----------------");
-			ctx.getNamedDispatcher(controller).include(req, resp);
+			HashMap<String, Object> data = new HashMap<String, Object>();
+			HashMap<String, String> params = new HashMap<String, String>();
+			String cid = resources.getCId();
+			String sid = resources.getSId();
+			logger.trace("C:" + controller.getSimpleName() + "/" + cid);
+			logger.trace("S:" + scope.getSimpleName() + "/" + sid);
+			Object o;
+
+			params.put("id", sid);
+			params.put("sid", sid);
+			o = getData(scope, params);
+			if (o instanceof ArrayList) {
+				data.put(controller.getSimpleName().toLowerCase(), o);
+			} else if (o instanceof HashMap<?, ?>) {
+				data.putAll((Map<? extends String, ? extends Object>) o);
+			}
+
+			params.put("id", cid);
+			params.put("sid", sid);
+			o = getData(controller, params);
+			if (o instanceof ArrayList) {
+				data.put(controller.getSimpleName().toLowerCase(), o);
+			} else if (o instanceof HashMap<?, ?>) {
+				data.putAll((Map<? extends String, ? extends Object>) o);
+			}
+			out.println(data);
+
+			if (extension.compareTo("json") == 0) {
+				req.setAttribute("data", data);
+				req.getRequestDispatcher("/JsonWriter").forward(req, resp);
+			}
 		} catch (ServletException e) {
 			resp.setStatus(400);
 			resp.resetBuffer();
