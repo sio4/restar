@@ -24,7 +24,10 @@ public class JsonWriter extends HttpServlet {
 	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
 		PrintWriter out = resp.getWriter();
-		Gson gson = new GsonBuilder().setPrettyPrinting().create();
+		Gson gson = new GsonBuilder()
+				.setPrettyPrinting()
+				.disableHtmlEscaping()
+				.create();
 		out.println(gson.toJson(req.getAttribute("data")));
 	}
 

@@ -15,7 +15,7 @@ public abstract class Controller {
 	protected ArrayList<HashMap<String, Object>> parents;
 	protected ArrayList<HashMap<?, ?>> list = new ArrayList<HashMap<?, ?>>();
 
-	Logger logger;
+	protected Logger logger;
 
 	public Controller() {
 		className = this.getClass().getSimpleName().toLowerCase();
