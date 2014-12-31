@@ -20,7 +20,6 @@ public abstract class Controller {
 	public Controller() {
 		className = this.getClass().getSimpleName().toLowerCase();
 		logger = LogManager.getLogger(className);
-		logger.trace("class initiated: " + className);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -49,6 +48,6 @@ public abstract class Controller {
 		return resp;
 	}
 
-	public abstract Object index(HashMap<String, Object> params);
+	public abstract HashMap<String, Object> index(HashMap<String, Object> params);
 
 }

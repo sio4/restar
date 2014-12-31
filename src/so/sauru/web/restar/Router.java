@@ -2,8 +2,9 @@ package so.sauru.web.restar;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
+import java.util.Iterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -15,6 +16,12 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import so.sauru.Utils;
+
+/**
+ * @author sio4
+ *
+ */
 public abstract class Router extends HttpServlet {
 	private static final long serialVersionUID = 1L;
 	private static final String restarVersionString = "RESTar/0.0.1";
@@ -22,8 +29,6 @@ public abstract class Router extends HttpServlet {
 	private String packageName;
 	private String cPackageName;
 
-	private Class<?> controller;
-	private Class<?> scope;
 	private String extension = "html";
 
 	Logger logger = LogManager.getLogger("Router");
@@ -46,21 +51,25 @@ public abstract class Router extends HttpServlet {
 		}
 	}
 
+	/**
+	 * @author sio4
+	 *
+	 */
 	public class RestRequest {
 		private Pattern regexExt = Pattern.compile("(.+)\\.([A-z]+)");
 		private Pattern regexPath = Pattern.compile("/([^/?]+)(.*)");
-		private HashMap<Integer, String> ctrlMap = new HashMap<Integer, String>();
+		private ArrayList<HashMap<String, String>> cChain;
 
-		private String scopeName = null;
-		private String ctrlName = null;
-		private String sid = null;
-		private String cid = "*";
-
+		/**
+		 * @param pathInfo
+		 * @throws ServletException
+		 */
 		public RestRequest(String pathInfo) throws ServletException {
 			Matcher matcher;
 			String rem = pathInfo;
 			extension = "html";
 
+			/* get and remove extension first */
 			matcher = regexExt.matcher(rem);
 			if (matcher.find()) {
 				extension = matcher.group(2);
@@ -70,72 +79,47 @@ public abstract class Router extends HttpServlet {
 				logger.trace("no extension found. use default. " + extension);
 			}
 
-			int i = 0;
+			cChain = new ArrayList<HashMap<String, String>>();
+			cChain.clear();
+			String cont = null;
 			while (rem.length() > 0) {
 				matcher = regexPath.matcher(rem);
-				if (matcher.find()) {
-					ctrlMap.put(i, matcher.group(1));
-					rem = matcher.group(2);
-					logger.trace("get " + matcher.group(1) + ", remind " + rem);
-					i++;
-				} else {
+				if (matcher.find() == false) {
 					break;
 				}
-			}
-			logger.trace("ctrlMap has " + ctrlMap.size() + " elements.");
 
-			switch (ctrlMap.size()) {
-			case 4:
-				cid = ctrlMap.get(3);
-			case 3:
-				ctrlName = ctrlMap.get(2);
-				sid = ctrlMap.get(1);
-				scopeName = ctrlMap.get(0);
-				break; // break for 4 and 3. 4 includes 3.
-			case 2:
-				cid = ctrlMap.get(1);
-			case 1:
-				ctrlName = ctrlMap.get(0);
-				break; // break for 2 and 1. 2 includes 1.
-			}
-
-			controller = getClazz(cPackageName, ctrlName);
-			scope = getClazz(cPackageName, scopeName);
-			if (ctrlName != null && controller != null) {
-				if (scopeName == null || scope != null) {
-					return;
+				if (cont == null) {
+					/* controller, check existence of corresponding class. */
+					cont = matcher.group(1);
+					if (getClazz(cPackageName, cont) == null) {
+						String err = "Invalid URI '" + pathInfo + "'. "
+								+ "controller for '" + cont + "' not found.";
+						logger.error(err);
+						throw new ServletException(err);
+					}
 				} else {
-					logger.error("Invalid URI(s) " + pathInfo);
-					throw new ServletException("Invalid URI(s) " + pathInfo);
+					/* argument, add controller-argument pair to list. */
+					HashMap<String, String> x = new HashMap<String, String>();
+					x.put("controller", cont);
+					x.put("argument", matcher.group(1));
+					cChain.add(x);
+					cont = null;
 				}
-			} else {
-				logger.error("Invalid URI(c) " + pathInfo);
-				throw new ServletException("Invalid URI(c) " + pathInfo);
+				rem = matcher.group(2);
+				logger.trace("get " + matcher.group(1) + ", remind " + rem);
 			}
-		}
-
-		public String getCId() {
-			return cid;
-		}
-
-		public String getSId() {
-			return sid;
-		}
-	}
-
-	private Object getData(Class<?> ctrl, HashMap<String, Object> params) {
-		if (ctrl == null) {
-			return null;
-		} else {
-			try {
-				Controller o = (Controller) ctrl.newInstance();
-				logger.trace("new instance of " + o.getClass().getName());
-				return o.index(params);
-			} catch (InstantiationException | IllegalAccessException e) {
-				e.printStackTrace();
+			if (cont != null) {
+				/* add remaining controller without argument. */
+				HashMap<String, String> x = new HashMap<String, String>();
+				x.put("controller", cont);
+				x.put("argument", "*");
+				cChain.add(x);
+				cont = null;
 			}
+			logger.trace("controller chain: " + cChain.toString());
+
+			return;
 		}
-		return null;
 	}
 
 	@Override
@@ -144,9 +128,13 @@ public abstract class Router extends HttpServlet {
 	}
 
 	/**
+	 * restar.Router version of GET HttpServletRequest Handler. It parses the
+	 * URI of GET request for RESTful API and calls root of registered
+	 * Controller classes.
+	 * 
+	 * @see Controller
 	 * @see HttpServlet#doGet(HttpServletRequest, HttpServletResponse)
 	 */
-	@SuppressWarnings("unchecked")
 	@Override
 	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
@@ -155,7 +143,9 @@ public abstract class Router extends HttpServlet {
 		out.println("pathinfo: " + req.getPathInfo());
 		out.println("params: " + req.getParameterMap());
 
+		logger.trace("--- start");
 		if (req.getPathInfo().equals("/")) {
+			/* just show version string if no path given. */
 			resp.resetBuffer();
 			out.println(this.toString());
 			out.close();
@@ -164,53 +154,79 @@ public abstract class Router extends HttpServlet {
 
 		try {
 			RestRequest resources = new RestRequest(req.getPathInfo());
-			HashMap<String, Object> data = new HashMap<String, Object>();
-			HashMap<String, Object> params = new HashMap<String, Object>();
-			String cid = resources.getCId();
-			String sid = resources.getSId();
-			Object o;
+			HashMap<String, Object> message = new HashMap<String, Object>();
 
-			if (scope != null) {
-				logger.trace("S:" + scope.getSimpleName() + "/" + sid);
-				params.put("id", sid);
-				params.put("response", data);
-				o = getData(scope, params);
-				logger.trace("returns " + o.getClass().getSimpleName());
-				if (o instanceof HashMap<?, ?>) {
-					data.putAll((Map<? extends String, ? extends Object>) o);
-				}
-				params.clear();
-
-				params.put("sid", sid);
-				params.put("response", data);
-				params.put("scope_name", scope.getSimpleName().toLowerCase());
-			}
-
-			if (controller != null) {
-				logger.trace("C:" + controller.getSimpleName() + "/" + cid);
-				params.put("id", cid);
-				params.put("response", data);
-				o = getData(controller, params);
-				logger.trace("returns " + o.getClass().getSimpleName());
-				if (o instanceof HashMap<?, ?>) {
-					data.putAll((Map<? extends String, ? extends Object>) o);
-				}
-			}
-			params.put("path", req.getPathInfo());
-
-			out.println(params);
+			message.put("path", req.getPathInfo());
+			message.put("children", resources.cChain);
+			message.put("response", getResponse(message, 0));
 
 			if (extension.compareTo("json") == 0) {
 				resp.resetBuffer();
-				req.setAttribute("data", params);
+				req.setAttribute("data", message);
 				req.getRequestDispatcher("/JsonWriter").forward(req, resp);
 			}
 		} catch (ServletException e) {
 			resp.setStatus(400);
 			resp.resetBuffer();
+			out.println(e.toString());
 			e.printStackTrace();
 		}
 		out.close();
+	}
+
+	private HashMap<String, Object>
+			getResponse(HashMap<String, Object> message, int level) {
+		String controllerName = "error";
+		HashMap<String, Object> result = null;
+		ArrayList<HashMap<String, String>> children;
+		children = Utils.toArrayListHashMapStrStr(message.get("children"));
+		logger.debug("getResponse called with level " + level + ".");
+
+		if (children.size() > level) {
+			controllerName = children.get(level).get("controller");
+			String argument = children.get(level).get("argument");
+			Class<?> cClass = getClazz(cPackageName, controllerName);
+			if (cClass == null) {
+				logger.error("oops! no class for " + controllerName
+						+ "! it's impossible! what's going on?");
+				return null;
+			}
+			logger.trace("- CZ: " + cClass.getSimpleName() + "/" + argument);
+
+			try {
+				HashMap<String, Object> mesg = new HashMap<String, Object>();
+				mesg.put("argument", argument);
+				Controller cInst = (Controller) cClass.newInstance();
+				logger.trace("- new instance of " + cInst.getClass().getName());
+				result = cInst.index(mesg);
+				logger.trace("- result: " + result.toString());
+			} catch (InstantiationException | IllegalAccessException e) {
+				e.printStackTrace();
+				return null;
+			}
+		}
+
+		if (children.size() > level + 1) {
+			logger.trace("remainder: " + children.toString());
+			Iterator<HashMap<String, Object>> iter = Utils
+					.toArrayListHashMapStrObj(result.get(controllerName))
+					.iterator();
+			while (iter.hasNext()) {
+				HashMap<String, Object> elem = iter.next();
+				HashMap<String, Object> rslt = null;
+
+				HashMap<String, Object> mesg = new HashMap<String, Object>(
+						message);
+				rslt = getResponse(mesg, level + 1);
+				if (rslt != null) {
+					elem.putAll(rslt);
+				} else {
+					elem.put("ERROR", rslt);
+					logger.error("result is null.");
+				}
+			}
+		}
+		return result;
 	}
 
 	/**
