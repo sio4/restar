@@ -48,6 +48,6 @@ public abstract class Controller {
 		return resp;
 	}
 
-	public abstract HashMap<String, Object> index(HashMap<String, Object> params);
+	public abstract HashMap<String, Object> index(HashMap<String, Object> message);
 
 }

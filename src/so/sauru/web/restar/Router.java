@@ -143,7 +143,9 @@ public abstract class Router extends HttpServlet {
 		out.println("pathinfo: " + req.getPathInfo());
 		out.println("params: " + req.getParameterMap());
 
-		logger.trace("--- start");
+		customInit();
+
+		logger.trace("--- start ----------------------------------------------");
 		if (req.getPathInfo().equals("/")) {
 			/* just show version string if no path given. */
 			resp.resetBuffer();
@@ -177,7 +179,7 @@ public abstract class Router extends HttpServlet {
 	private HashMap<String, Object>
 			getResponse(HashMap<String, Object> message, int level) {
 		String controllerName = "error";
-		HashMap<String, Object> result = null;
+		HashMap<String, Object> result = new HashMap<String, Object>();
 		ArrayList<HashMap<String, String>> children;
 		children = Utils.toArrayListHashMapStrStr(message.get("children"));
 		logger.debug("getResponse called with level " + level + ".");
@@ -195,11 +197,15 @@ public abstract class Router extends HttpServlet {
 
 			try {
 				HashMap<String, Object> mesg = new HashMap<String, Object>();
+				HashMap<String, Object> rslt = new HashMap<String, Object>();
 				mesg.put("argument", argument);
 				Controller cInst = (Controller) cClass.newInstance();
 				logger.trace("- new instance of " + cInst.getClass().getName());
-				result = cInst.index(mesg);
-				logger.trace("- result: " + result.toString());
+				rslt = cInst.index(mesg);
+				if (rslt != null) {
+					result.putAll(rslt);
+					logger.trace("- result: " + result.toString());
+				}
 			} catch (InstantiationException | IllegalAccessException e) {
 				e.printStackTrace();
 				return null;
@@ -259,4 +265,5 @@ public abstract class Router extends HttpServlet {
 		super.doDelete(req, resp);
 	}
 
+	public abstract void customInit();
 }
