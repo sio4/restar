@@ -128,9 +128,9 @@ public abstract class Router extends HttpServlet {
 	}
 
 	/**
-	 * restar.Router version of GET HttpServletRequest Handler. It parses the
-	 * URI of GET request for RESTful API and calls root of registered
-	 * Controller classes.
+	 * restar.Router version of <tt>GET</tt> <tt>HttpServletRequest</tt>
+	 * Handler. It parses the <tt>URI</tt> of <tt>GET</tt> request for RESTful
+	 * API and calls registered <tt>root</tt> Controller class.
 	 * 
 	 * @see Controller
 	 * @see HttpServlet#doGet(HttpServletRequest, HttpServletResponse)
@@ -176,6 +176,18 @@ public abstract class Router extends HttpServlet {
 		out.close();
 	}
 
+	/**
+	 * is called by <tt>doGet(...)</tt> automatically before URI parsing, and
+	 * compound responses of related classes/methods recursively. the recursion
+	 * of this method will generate nested object tree, so it can be handled by
+	 * JsonWirter or other object formatter.
+	 * 
+	 * @param message
+	 *            hash-map structured task informations
+	 * @param level
+	 *            nest level (the initial value is zero)
+	 * @return the final, structured response
+	 */
 	private HashMap<String, Object>
 			getResponse(HashMap<String, Object> message, int level) {
 		String controllerName = "error";

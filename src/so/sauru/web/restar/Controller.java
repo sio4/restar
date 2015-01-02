@@ -7,6 +7,10 @@ import java.util.Iterator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+/**
+ * @author sio4
+ *
+ */
 public abstract class Controller {
 	private static String className;
 
@@ -22,8 +26,15 @@ public abstract class Controller {
 		logger = LogManager.getLogger(className);
 	}
 
-	@SuppressWarnings("unchecked")
-	protected HashMap<String, Object> assemble(Object list,
+	/**
+	 * deprecated! do not use this!
+	 * 
+	 * @param list
+	 * @param params
+	 * @return T.T
+	 */
+	@SuppressWarnings({ "unchecked", "unused" })
+	private HashMap<String, Object> assemble(Object list,
 			HashMap<String, Object> params) {
 		resp = (HashMap<String, Object>) params.get("response");
 		if (params.containsKey("scope_name")) {
@@ -48,6 +59,29 @@ public abstract class Controller {
 		return resp;
 	}
 
-	public abstract HashMap<String, Object> index(HashMap<String, Object> message);
+	/**
+	 * controller method for GET request, to get list of objects with select
+	 * condition <tt>'argument'</tt>. the parameter named <tt>argument</tt> is
+	 * same for all cases, but it must be interpreted by each implementation's
+	 * context. <br>
+	 * <br>
+	 * for example, the <tt>argument</tt> <tt>'dennis'</tt> for
+	 * <tt>controller</tt> <tt>person</tt> can be interpreted as <tt>name</tt>
+	 * of <tt>person</tt> or <tt>id</tt> of <tt>person</tt> which we need to
+	 * select. <br>
+	 * another example, the <tt>argument</tt> <tt>'@earth'</tt> for
+	 * <tt>person</tt> can be interpreted as <tt>group</tt> of people but for
+	 * <tt>account</tt>, it can be interpreted as the <tt>server</tt> we want to
+	 * get the list of accounts.
+	 * 
+	 * @param message
+	 *            contains all information about the request, especially
+	 *            <tt>'argument'</tt> that is <tt>id</tt> part of REST URI
+	 *            <tt>'/controller/id'</tt>.
+	 * @return hash-mapped object something like: { "class_of_object" :
+	 *         [{object}, {object},...] }
+	 */
+	public abstract HashMap<String, Object> index(
+			HashMap<String, Object> message);
 
 }

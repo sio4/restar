@@ -16,10 +16,17 @@ import com.google.gson.GsonBuilder;
 public class JsonWriter extends HttpServlet {
 	private static final long serialVersionUID = 1L;
 
+	/**
+	 * generate JSON formatted response with <tt>'data'</tt> attribute of the
+	 * <tt>request</tt>.
+	 */
 	public JsonWriter() {
 		// TODO Auto-generated constructor stub
 	}
 
+	/* (non-Javadoc)
+	 * @see javax.servlet.http.HttpServlet#doGet(javax.servlet.http.HttpServletRequest, javax.servlet.http.HttpServletResponse)
+	 */
 	@Override
 	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {

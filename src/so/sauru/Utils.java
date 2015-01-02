@@ -6,8 +6,8 @@ import java.util.HashMap;
 public final class Utils {
 
 	/**
-	 * replacement of casting as from Object to HashMap<String, Object> without
-	 * annoying warning.
+	 * replacement of casting as from Object to
+	 * <tt>HashMap&lt;String, Object&gt;</tt> without annoying warning.
 	 * 
 	 * @param object
 	 * @return object it self which is casted as return type.
@@ -22,8 +22,8 @@ public final class Utils {
 	}
 
 	/**
-	 * replacement of casting as from Object to HashMap<String, String> without
-	 * annoying warning.
+	 * replacement of casting as from Object to
+	 * <tt>HashMap&lt;String, String&gt;</tt> without annoying warning.
 	 * 
 	 * @param object
 	 * @return object it self which is casted as return type.
@@ -38,8 +38,9 @@ public final class Utils {
 	}
 
 	/**
-	 * replacement of casting as from Object to ArrayList<HashMap<String,
-	 * Object>> without annoying warning.
+	 * replacement of casting as from Object to
+	 * <tt>ArrayList&lt;HashMap&lt;String, Object&gt;&gt;</tt> without annoying
+	 * warning.
 	 * 
 	 * @param object
 	 * @return object it self which is casted as return type.
@@ -54,8 +55,9 @@ public final class Utils {
 	}
 
 	/**
-	 * replacement of casting as from Object to ArrayList<HashMap<String,
-	 * String>> without annoying warning.
+	 * replacement of casting as from Object to
+	 * <tt>ArrayList&lt;HashMap&lt;String, * String&gt;&gt;</tt> without
+	 * annoying warning.
 	 * 
 	 * @param object
 	 * @return object it self which is casted as return type.
