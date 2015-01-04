@@ -139,13 +139,12 @@ public abstract class Router extends HttpServlet {
 	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
 		PrintWriter out = resp.getWriter();
-		out.println("GET request handling");
-		out.println("pathinfo: " + req.getPathInfo());
-		out.println("params: " + req.getParameterMap());
 
 		customInit();
 
 		logger.trace("--- start ----------------------------------------------");
+		logger.debug("pathinfo: " + req.getPathInfo());
+		logger.debug("params: " + req.getParameterMap());
 		if (req.getPathInfo().equals("/")) {
 			/* just show version string if no path given. */
 			resp.resetBuffer();
@@ -158,13 +157,16 @@ public abstract class Router extends HttpServlet {
 			RestRequest resources = new RestRequest(req.getPathInfo());
 			HashMap<String, Object> message = new HashMap<String, Object>();
 
+			String rootName = resources.cChain.get(0).get("controller");
+
 			message.put("path", req.getPathInfo());
 			message.put("children", resources.cChain);
-			message.put("response", getResponse(message, 0));
+			message.put("object", rootName);
+			message.put("response", getResponse(message, 0).get(rootName));
 
 			if (extension.compareTo("json") == 0) {
 				resp.resetBuffer();
-				req.setAttribute("data", message);
+				req.setAttribute("data", getResponse(message, 0).get(rootName));
 				req.getRequestDispatcher("/JsonWriter").forward(req, resp);
 			}
 		} catch (ServletException e) {
