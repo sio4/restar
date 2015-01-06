@@ -246,6 +246,11 @@ public abstract class Router extends HttpServlet {
 				}
 			}
 		}
+		/*
+		logger.trace("XXX"
+				+ ((ArrayList<?>) result.get(controllerName)).get(0).getClass()
+						.getSimpleName());
+						*/
 		return result;
 	}
 

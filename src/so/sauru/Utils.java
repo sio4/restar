@@ -5,6 +5,23 @@ import java.util.HashMap;
 
 public final class Utils {
 
+	public static Object toNumIfNum(String str) {
+		try {
+			return Integer.parseInt(str);
+		} catch (NumberFormatException e1) {
+			try {
+				return Long.parseLong(str);
+			} catch (NumberFormatException e2) {
+				try {
+					return Double.parseDouble(str);
+				} catch (NumberFormatException e3) {
+					return str;
+				}
+
+			}
+		}
+	}
+
 	/**
 	 * replacement of casting as from Object to
 	 * <tt>HashMap&lt;String, Object&gt;</tt> without annoying warning.
