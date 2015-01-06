@@ -3,6 +3,7 @@ package so.sauru.web.restar;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.regex.Matcher;
@@ -26,6 +27,15 @@ public abstract class Router extends HttpServlet {
 	private static final long serialVersionUID = 1L;
 	private static final String restarVersionString = "RESTar/0.0.1";
 	private static final String routerVersionString = "Router/0.0.1";
+
+	/* KEYNAMEs */
+	public static final String PATH = "path";
+	public static final String PARAMS = "params";
+	public static final String CHILDREN = "children";
+	public static final String OBJECT = "object";
+	public static final String CONTROLLER = "controller";
+	public static final String ID = "id";
+
 	private String packageName;
 	private String cPackageName;
 
@@ -98,10 +108,10 @@ public abstract class Router extends HttpServlet {
 						throw new ServletException(err);
 					}
 				} else {
-					/* argument, add controller-argument pair to list. */
+					/* id, add controller-id pair to list. */
 					HashMap<String, String> x = new HashMap<String, String>();
-					x.put("controller", cont);
-					x.put("argument", matcher.group(1));
+					x.put(CONTROLLER, cont);
+					x.put(ID, matcher.group(1));
 					cChain.add(x);
 					cont = null;
 				}
@@ -109,10 +119,10 @@ public abstract class Router extends HttpServlet {
 				logger.trace("get " + matcher.group(1) + ", remind " + rem);
 			}
 			if (cont != null) {
-				/* add remaining controller without argument. */
+				/* add remaining controller without id. */
 				HashMap<String, String> x = new HashMap<String, String>();
-				x.put("controller", cont);
-				x.put("argument", "*");
+				x.put(CONTROLLER, cont);
+				x.put(ID, "*");
 				cChain.add(x);
 				cont = null;
 			}
@@ -139,12 +149,12 @@ public abstract class Router extends HttpServlet {
 	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
 		PrintWriter out = resp.getWriter();
+		HashMap<String, Object> params = new HashMap<String, Object>();
 
 		customInit();
 
 		logger.trace("--- start ----------------------------------------------");
 		logger.debug("pathinfo: " + req.getPathInfo());
-		logger.debug("params: " + req.getParameterMap());
 		if (req.getPathInfo().equals("/")) {
 			/* just show version string if no path given. */
 			resp.resetBuffer();
@@ -153,16 +163,24 @@ public abstract class Router extends HttpServlet {
 			return;
 		}
 
+		Enumeration<String> pNs = req.getParameterNames();
+		while (pNs.hasMoreElements()) {
+			String pN = pNs.nextElement();
+			params.put(pN, req.getParameter(pN));
+		}
+		logger.debug("params: " + params.toString());
+
 		try {
 			RestRequest resources = new RestRequest(req.getPathInfo());
 			HashMap<String, Object> message = new HashMap<String, Object>();
 
-			String rootName = resources.cChain.get(0).get("controller");
+			String rootName = resources.cChain.get(0).get(CONTROLLER);
 
-			message.put("path", req.getPathInfo());
-			message.put("children", resources.cChain);
-			message.put("object", rootName);
-			message.put("response", getResponse(message, 0).get(rootName));
+			message.put(PATH, req.getPathInfo());
+			message.put(CHILDREN, resources.cChain);
+			message.put(OBJECT, rootName);
+			message.put(PARAMS, params);
+			// message.put("response", getResponse(message, 0).get(rootName));
 
 			if (extension.compareTo("json") == 0) {
 				resp.resetBuffer();
@@ -195,24 +213,25 @@ public abstract class Router extends HttpServlet {
 		String controllerName = "error";
 		HashMap<String, Object> result = new HashMap<String, Object>();
 		ArrayList<HashMap<String, String>> children;
-		children = Utils.toArrayListHashMapStrStr(message.get("children"));
+		children = Utils.toArrayListHashMapStrStr(message.get(CHILDREN));
 		logger.debug("getResponse called with level " + level + ".");
 
 		if (children.size() > level) {
-			controllerName = children.get(level).get("controller");
-			String argument = children.get(level).get("argument");
+			controllerName = children.get(level).get(CONTROLLER);
+			String id = children.get(level).get(ID);
 			Class<?> cClass = getClazz(cPackageName, controllerName);
 			if (cClass == null) {
 				logger.error("oops! no class for " + controllerName
 						+ "! it's impossible! what's going on?");
 				return null;
 			}
-			logger.trace("- CZ: " + cClass.getSimpleName() + "/" + argument);
+			logger.trace("- CZ: " + cClass.getSimpleName() + "/" + id);
 
 			try {
 				HashMap<String, Object> mesg = new HashMap<String, Object>();
 				HashMap<String, Object> rslt = new HashMap<String, Object>();
-				mesg.put("argument", argument);
+				mesg.put(ID, id);
+				mesg.put(PARAMS, message.get(PARAMS));
 				Controller cInst = (Controller) cClass.newInstance();
 				logger.trace("- new instance of " + cInst.getClass().getName());
 				rslt = cInst.index(mesg);
