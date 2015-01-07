@@ -12,7 +12,7 @@ import org.apache.logging.log4j.Logger;
  *
  */
 public abstract class Controller {
-	private static String className;
+	protected String className;
 
 	protected HashMap<String, Object> resp;
 	protected HashMap<String, Object> parent;

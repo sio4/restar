@@ -210,18 +210,18 @@ public abstract class Router extends HttpServlet {
 	 */
 	private HashMap<String, Object>
 			getResponse(HashMap<String, Object> message, int level) {
-		String controllerName = "error";
+		String ctrlrName = "error";
 		HashMap<String, Object> result = new HashMap<String, Object>();
 		ArrayList<HashMap<String, String>> children;
 		children = Utils.toArrayListHashMapStrStr(message.get(CHILDREN));
 		logger.debug("getResponse called with level " + level + ".");
 
 		if (children.size() > level) {
-			controllerName = children.get(level).get(CONTROLLER);
+			ctrlrName = children.get(level).get(CONTROLLER);
 			String id = children.get(level).get(ID);
-			Class<?> cClass = getClazz(cPackageName, controllerName);
+			Class<?> cClass = getClazz(cPackageName, ctrlrName);
 			if (cClass == null) {
-				logger.error("oops! no class for " + controllerName
+				logger.error("oops! no class for " + ctrlrName
 						+ "! it's impossible! what's going on?");
 				return null;
 			}
@@ -237,7 +237,12 @@ public abstract class Router extends HttpServlet {
 				rslt = cInst.index(mesg);
 				if (rslt != null) {
 					result.putAll(rslt);
-					logger.trace("- result: " + result.toString());
+					try {
+						String rt = rslt.get(ctrlrName).getClass().getName();
+						logger.trace("- result type: " + rt);
+					} catch (NullPointerException e) {
+						logger.trace("oops! result is null!");
+					}
 				}
 			} catch (InstantiationException | IllegalAccessException e) {
 				e.printStackTrace();
@@ -248,7 +253,7 @@ public abstract class Router extends HttpServlet {
 		if (children.size() > level + 1) {
 			logger.trace("remainder: " + children.toString());
 			Iterator<HashMap<String, Object>> iter = Utils
-					.toArrayListHashMapStrObj(result.get(controllerName))
+					.toArrayListHashMapStrObj(result.get(ctrlrName))
 					.iterator();
 			while (iter.hasNext()) {
 				HashMap<String, Object> elem = iter.next();
