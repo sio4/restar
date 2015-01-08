@@ -60,6 +60,7 @@ public abstract class Router extends HttpServlet {
 
 	private String packageName;
 	private String cPackageName;
+	private boolean metaeEnabled = false;
 
 	private String extension = "html";
 
@@ -69,6 +70,11 @@ public abstract class Router extends HttpServlet {
 		super();
 		this.packageName = this.getClass().getPackage().getName();
 		this.cPackageName = packageName + ".controller";
+	}
+
+	protected boolean setMetaMode(boolean mode) {
+		metaeEnabled = mode;
+		return metaeEnabled;
 	}
 
 	private Class<?> getClazz(String pName, String cName) {
@@ -202,11 +208,18 @@ public abstract class Router extends HttpServlet {
 			message.put(CHILDREN, resources.cChain);
 			message.put(OBJECT, rootName);
 			message.put(PARAMS, params);
-			// message.put("response", getResponse(message, 0).get(rootName));
 
 			if (extension.compareTo("json") == 0) {
 				resp.resetBuffer();
-				req.setAttribute("data", getResponse(message, 0).get(rootName));
+				if (metaeEnabled == true) {
+					HashMap<String, Object> re = new HashMap<String, Object>();
+					re.put("meta", message);
+					re.put("objects", getResponse(message, 0).get(rootName));
+					req.setAttribute("data", re);
+				} else {
+					req.setAttribute("data",
+							getResponse(message, 0).get(rootName));
+				}
 				req.getRequestDispatcher("/JsonWriter").forward(req, resp);
 			}
 		} catch (ServletException e) {
@@ -292,11 +305,6 @@ public abstract class Router extends HttpServlet {
 				}
 			}
 		}
-		/*
-		logger.trace("XXX"
-				+ ((ArrayList<?>) result.get(controllerName)).get(0).getClass()
-						.getSimpleName());
-						*/
 		return result;
 	}
 
