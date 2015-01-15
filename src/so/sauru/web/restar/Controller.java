@@ -106,4 +106,12 @@ public abstract class Controller {
 	public abstract HashMap<String, Object> index(
 			HashMap<String, Object> message);
 
+	public abstract HashMap<String, Object> create(
+			HashMap<String, Object> message);
+
+	public abstract HashMap<String, Object> update(
+			HashMap<String, Object> message);
+
+	public abstract HashMap<String, Object> delete(
+			HashMap<String, Object> message);
 }

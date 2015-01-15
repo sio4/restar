@@ -22,6 +22,7 @@
  *****************************************************************************/
 package so.sauru.web.restar;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -39,6 +40,8 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.google.gson.Gson;
+
 import so.sauru.Utils;
 
 /**
@@ -52,15 +55,16 @@ public abstract class Router extends HttpServlet {
 
 	/* KEYNAMEs */
 	public static final String PATH = "path";
+	public static final String METHOD = "method";
+	public static final String OPERATION = "operation";
 	public static final String PARAMS = "params";
 	public static final String CHILDREN = "children";
-	public static final String OBJECT = "object";
 	public static final String CONTROLLER = "controller";
 	public static final String ID = "id";
 
 	private String packageName;
 	private String cPackageName;
-	private boolean metaeEnabled = false;
+	private boolean metaEnabled = false;
 
 	private String extension = "html";
 
@@ -73,8 +77,8 @@ public abstract class Router extends HttpServlet {
 	}
 
 	protected boolean setMetaMode(boolean mode) {
-		metaeEnabled = mode;
-		return metaeEnabled;
+		metaEnabled = mode;
+		return metaEnabled;
 	}
 
 	private Class<?> getClazz(String pName, String cName) {
@@ -144,7 +148,7 @@ public abstract class Router extends HttpServlet {
 					cont = null;
 				}
 				rem = matcher.group(2);
-				logger.trace("get " + matcher.group(1) + ", remind " + rem);
+				logger.trace("get '{}', remind: '{}'", matcher.group(1), rem);
 			}
 			if (cont != null) {
 				/* add remaining controller without id. */
@@ -165,70 +169,60 @@ public abstract class Router extends HttpServlet {
 		return restarVersionString + "\n" + routerVersionString + "\n";
 	}
 
-	/**
-	 * restar.Router version of <tt>GET</tt> <tt>HttpServletRequest</tt>
-	 * Handler. It parses the <tt>URI</tt> of <tt>GET</tt> request for RESTful
-	 * API and calls registered <tt>root</tt> Controller class.
-	 * 
-	 * @see Controller
-	 * @see HttpServlet#doGet(HttpServletRequest, HttpServletResponse)
-	 */
-	@Override
-	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-			throws ServletException, IOException {
-		PrintWriter out = resp.getWriter();
-		HashMap<String, Object> params = new HashMap<String, Object>();
-
-		customInit();
-
+	private void rootThenAbort(HttpServletRequest req, HttpServletResponse resp)
+			throws IOException {
 		logger.trace("--- start ----------------------------------------------");
 		logger.debug("pathinfo: " + req.getPathInfo());
 		if (req.getPathInfo().equals("/")) {
 			/* just show version string if no path given. */
+			PrintWriter out = resp.getWriter();
 			resp.resetBuffer();
 			out.println(this.toString());
 			out.close();
 			return;
 		}
+	}
 
-		Enumeration<String> pNs = req.getParameterNames();
-		while (pNs.hasMoreElements()) {
-			String pN = pNs.nextElement();
-			params.put(pN, req.getParameter(pN));
-		}
-		logger.debug("params: " + params.toString());
+	private void abort500(HttpServletResponse resp, Exception e)
+			throws IOException {
+		PrintWriter out = resp.getWriter();
+		resp.setStatus(500);
+		out.println(e.getMessage());
+		e.printStackTrace();
+		out.close();
+	}
+
+	protected void doResponse(HttpServletRequest req, HttpServletResponse resp,
+			HashMap<String, Object> params) throws IOException {
+		logger.trace("doResponse params: {}", params.toString());
 
 		try {
 			RestRequest resources = new RestRequest(req.getPathInfo());
 			HashMap<String, Object> message = new HashMap<String, Object>();
-
-			String rootName = resources.cChain.get(0).get(CONTROLLER);
-
+			String ctrlr = resources.cChain.get(0).get(CONTROLLER);
 			message.put(PATH, req.getPathInfo());
 			message.put(CHILDREN, resources.cChain);
-			message.put(OBJECT, rootName);
+			message.put(CONTROLLER, ctrlr);
 			message.put(PARAMS, params);
+			message.put(METHOD, req.getMethod());
+			logger.trace("doResponse message: {}", message.toString());
+
+			customInit();
 
 			if (extension.compareTo("json") == 0) {
-				resp.resetBuffer();
-				if (metaeEnabled == true) {
+				if (metaEnabled == true) {
 					HashMap<String, Object> re = new HashMap<String, Object>();
 					re.put("meta", message);
-					re.put("objects", getResponse(message, 0).get(rootName));
+					re.put("objects", getResponse(message, 0).get(ctrlr));
 					req.setAttribute("data", re);
 				} else {
-					req.setAttribute("data",
-							getResponse(message, 0).get(rootName));
+					req.setAttribute("data", getResponse(message, 0).get(ctrlr));
 				}
 				req.getRequestDispatcher("/JsonWriter").forward(req, resp);
 			}
 		} catch (ServletException e) {
-			resp.setStatus(400);
-			resp.resetBuffer();
-			out.println(e.toString());
-			e.printStackTrace();
+			abort500(resp, e);
 		}
-		out.close();
 	}
 
 	/**
@@ -269,7 +263,17 @@ public abstract class Router extends HttpServlet {
 				mesg.put(PARAMS, message.get(PARAMS));
 				Controller cInst = (Controller) cClass.newInstance();
 				logger.trace("- new instance of " + cInst.getClass().getName());
-				rslt = cInst.index(mesg);
+				if (message.get(METHOD).equals("GET")) {
+					mesg.put(OPERATION, "index");
+					rslt = cInst.index(mesg);
+				} else if (message.get(METHOD).equals("POST")) {
+					mesg.put(OPERATION, "create");
+					rslt = cInst.create(mesg);
+				} else {
+					logger.error("oops! unsupported method '{}'.",
+							message.get(METHOD));
+					return null;
+				}
 				if (rslt != null) {
 					result.putAll(rslt);
 					try {
@@ -309,13 +313,51 @@ public abstract class Router extends HttpServlet {
 	}
 
 	/**
+	 * restar.Router version of <tt>GET</tt> <tt>HttpServletRequest</tt>
+	 * Handler. It parses the <tt>URI</tt> of <tt>GET</tt> request for RESTful
+	 * API and calls registered <tt>root</tt> Controller class.
+	 * 
+	 * @see Controller
+	 * @see HttpServlet#doGet(HttpServletRequest, HttpServletResponse)
+	 */
+	@Override
+	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+			throws ServletException, IOException {
+		HashMap<String, Object> params = new HashMap<String, Object>();
+		rootThenAbort(req, resp);
+
+		/* get GET parameters */
+		Enumeration<String> pNs = req.getParameterNames();
+		while (pNs.hasMoreElements()) {
+			String pN = pNs.nextElement();
+			params.put(pN, req.getParameter(pN));
+		}
+
+		doResponse(req, resp, params);
+	}
+
+	/**
 	 * @see HttpServlet#doPost(HttpServletRequest, HttpServletResponse)
 	 */
 	@Override
 	protected void doPost(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
-		// TODO Auto-generated method stub
-		super.doPost(req, resp);
+		HashMap<String, Object> params = new HashMap<String, Object>();
+		rootThenAbort(req, resp);
+
+		/* get POST parameters */
+		BufferedReader br = req.getReader();
+		StringBuilder sb = new StringBuilder();
+		String json;
+		while ((json = br.readLine()) != null) {
+			sb.append(json);
+		}
+		json = sb.toString();
+		logger.debug("json: {}", json);
+		Gson g = new Gson();
+		params = Utils.toHashMapStrObj(g.fromJson(json, params.getClass()));
+
+		doResponse(req, resp, params);
 	}
 
 	/**

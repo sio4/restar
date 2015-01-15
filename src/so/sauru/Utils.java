@@ -6,6 +6,13 @@ import java.util.HashMap;
 public final class Utils {
 
 	public static Object toNumIfNum(String str) {
+		/* is boolean? */
+		if (str.equalsIgnoreCase("true")) {
+			return true;
+		} else if (str.equalsIgnoreCase("false")) {
+			return false;
+		}
+		/* is numeric? */
 		try {
 			return Integer.parseInt(str);
 		} catch (NumberFormatException e1) {

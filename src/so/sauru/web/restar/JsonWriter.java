@@ -60,4 +60,34 @@ public class JsonWriter extends HttpServlet {
 		out.println(gson.toJson(req.getAttribute("data")));
 	}
 
+	/**
+	 * @see HttpServlet#doPost(javax.servlet.http.HttpServletRequest,
+	 *      javax.servlet.http.HttpServletResponse)
+	 */
+	@Override
+	protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+			throws ServletException, IOException {
+		this.doGet(req, resp);
+	}
+
+	/**
+	 * @see HttpServlet#doPut(javax.servlet.http.HttpServletRequest,
+	 *      javax.servlet.http.HttpServletResponse)
+	 */
+	@Override
+	protected void doPut(HttpServletRequest req, HttpServletResponse resp)
+			throws ServletException, IOException {
+		this.doGet(req, resp);
+	}
+
+	/**
+	 * @see HttpServlet#doDelete(javax.servlet.http.HttpServletRequest,
+	 *      javax.servlet.http.HttpServletResponse)
+	 */
+	@Override
+	protected void doDelete(HttpServletRequest req, HttpServletResponse resp)
+			throws ServletException, IOException {
+		this.doGet(req, resp);
+	}
+
 }
