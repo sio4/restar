@@ -48,6 +48,13 @@ public abstract class Controller {
 		logger = LogManager.getLogger(className);
 	}
 
+	public class ControllerException extends Exception {
+		private static final long serialVersionUID = 1L;
+
+		public ControllerException(String string) {
+			super(string);
+		}
+	}
 	/**
 	 * deprecated! do not use this!
 	 * 
@@ -102,16 +109,17 @@ public abstract class Controller {
 	 *            <tt>'/controller/id'</tt>.
 	 * @return hash-mapped object something like: { "class_of_object" :
 	 *         [{object}, {object},...] }
+	 * @throws ControllerException 
 	 */
 	public abstract HashMap<String, Object> index(
-			HashMap<String, Object> message);
+			HashMap<String, Object> message) throws ControllerException;
 
 	public abstract HashMap<String, Object> create(
-			HashMap<String, Object> message);
+			HashMap<String, Object> message) throws ControllerException;
 
 	public abstract HashMap<String, Object> update(
-			HashMap<String, Object> message);
+			HashMap<String, Object> message) throws ControllerException;
 
 	public abstract HashMap<String, Object> delete(
-			HashMap<String, Object> message);
+			HashMap<String, Object> message) throws ControllerException;
 }

@@ -43,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 import com.google.gson.Gson;
 
 import so.sauru.Utils;
+import so.sauru.web.restar.Controller.ControllerException;
 
 /**
  * @author sio4
@@ -221,6 +222,10 @@ public abstract class Router extends HttpServlet {
 				req.getRequestDispatcher("/JsonWriter").forward(req, resp);
 			}
 		} catch (ServletException e) {
+			logger.error("servlet exception: ", e.getMessage());
+			abort500(resp, e);
+		} catch (ControllerException e) {
+			logger.error("controller exception: ", e.getMessage());
 			abort500(resp, e);
 		}
 	}
@@ -236,9 +241,11 @@ public abstract class Router extends HttpServlet {
 	 * @param level
 	 *            nest level (the initial value is zero)
 	 * @return the final, structured response
+	 * @throws ControllerException
 	 */
 	private HashMap<String, Object>
-			getResponse(HashMap<String, Object> message, int level) {
+			getResponse(HashMap<String, Object> message, int level)
+					throws ControllerException {
 		String ctrlrName = "error";
 		HashMap<String, Object> result = new HashMap<String, Object>();
 		ArrayList<HashMap<String, String>> children;
