@@ -62,6 +62,8 @@ public abstract class Router extends HttpServlet {
 	public static final String CHILDREN = "children";
 	public static final String CONTROLLER = "controller";
 	public static final String ID = "id";
+	public static final String PARENT = "parent";
+	public static final String PID = "pid";
 
 	private String packageName;
 	private String cPackageName;
@@ -297,16 +299,19 @@ public abstract class Router extends HttpServlet {
 		}
 
 		if (children.size() > level + 1) {
-			logger.trace("remainder: " + children.toString());
+			logger.trace("callstack: " + children.toString());
 			Iterator<HashMap<String, Object>> iter = Utils
 					.toArrayListHashMapStrObj(result.get(ctrlrName))
 					.iterator();
 			while (iter.hasNext()) {
 				HashMap<String, Object> elem = iter.next();
 				HashMap<String, Object> rslt = null;
+				HashMap<String, Object> params = null;
 
 				HashMap<String, Object> mesg = new HashMap<String, Object>(
 						message);
+				params = Utils.toHashMapStrObj(mesg.get(PARAMS));
+				params.put(ctrlrName + "_id", elem.get(ID));
 				rslt = getResponse(mesg, level + 1);
 				if (rslt != null) {
 					elem.putAll(rslt);
