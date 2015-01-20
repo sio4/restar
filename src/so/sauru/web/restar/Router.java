@@ -192,6 +192,7 @@ public abstract class Router extends HttpServlet {
 		resp.setStatus(500);
 		out.println(e.getMessage());
 		e.printStackTrace();
+		logger.error("uncontrollable error! abort with status 500");
 		out.close();
 	}
 
@@ -223,6 +224,9 @@ public abstract class Router extends HttpServlet {
 				}
 				req.getRequestDispatcher("/JsonWriter").forward(req, resp);
 			}
+		} catch (NullPointerException e) {
+			logger.error("nullpointer exception!");
+			abort500(resp, e);
 		} catch (ServletException e) {
 			logger.error("servlet exception: ", e.getMessage());
 			abort500(resp, e);
@@ -291,6 +295,10 @@ public abstract class Router extends HttpServlet {
 					} catch (NullPointerException e) {
 						logger.trace("oops! result is null!");
 					}
+				} else {
+					logger.error("{}/{} returns null!",
+							cClass.getSimpleName(), mesg.get(OPERATION));
+					return null;
 				}
 			} catch (InstantiationException | IllegalAccessException e) {
 				e.printStackTrace();
