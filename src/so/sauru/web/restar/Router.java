@@ -122,6 +122,7 @@ public abstract class Router extends HttpServlet {
 
 	private HashMap<String, String> getParams(HttpServletRequest req) {
 		HashMap<String, String> params = new HashMap<String, String>();
+		// XXX remove it?
 
 		/* get GET parameters */
 		Enumeration<String> param_names = req.getParameterNames();
@@ -173,7 +174,7 @@ public abstract class Router extends HttpServlet {
 
 		// FLOW-INFO set router elements from request first...
 		route.put(PATH, req.getPathInfo());
-		route.put(PARAMS, getParams(req));
+		route.put(PARAMS, getParams(req));	// FIXME buggy
 		route.put(METHOD, getMethod(req));
 
 		matcher = regexPath.matcher(path_remind);
@@ -284,12 +285,13 @@ public abstract class Router extends HttpServlet {
 
 		try {
 			HashMap<String, Object> route = getRoute(req);
+			route.put(PARAMS, params);
 			String model = (String) route.get(MODEL);
 
 			customInit();
 
 			HashMap<String, Object> response = getResponse(route, 0);
-			if (!metaEnabled) {
+			if (metaEnabled) {
 				response.put("meta", route);
 				responseByExt(resp, response);
 			} else {
