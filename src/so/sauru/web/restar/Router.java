@@ -25,6 +25,8 @@ package so.sauru.web.restar;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -59,8 +61,9 @@ public abstract class Router extends HttpServlet {
 	public static final String METHOD = "method";
 	public static final String OPERATION = "operation";
 	public static final String PARAMS = "params";
-	public static final String CHILDREN = "children";
-	public static final String CONTROLLER = "controller";
+	public static final String ROUTE = "route";
+	public static final String MODEL = "model";
+	public static final String ROUTE_PATH = "route_path";
 	public static final String ID = "id";
 	public static final String PARENT = "parent";
 	public static final String PID = "pid";
@@ -69,7 +72,7 @@ public abstract class Router extends HttpServlet {
 	private String cPackageName;
 	private boolean metaEnabled = false;
 
-	private String extension = "html";
+	private String extension = "json";
 
 	Logger logger = LogManager.getLogger("Router");
 
@@ -96,94 +99,114 @@ public abstract class Router extends HttpServlet {
 		}
 	}
 
-	/**
-	 * @author sio4
-	 *
-	 */
-	public class RestRequest {
-		private Pattern regexExt = Pattern.compile("(.+)\\.([A-z]+)");
-		private Pattern regexPath = Pattern.compile("/([^/?]+)(.*)");
-		private ArrayList<HashMap<String, String>> cChain;
+	private HashMap<String, String> getParams(HttpServletRequest req) {
+		HashMap<String, String> params = new HashMap<String, String>();
 
-		/**
-		 * @param pathInfo
-		 * @throws ServletException
-		 */
-		public RestRequest(String pathInfo) throws ServletException {
-			Matcher matcher;
-			String rem = pathInfo;
-			extension = "html";
-
-			/* get and remove extension first */
-			matcher = regexExt.matcher(rem);
-			if (matcher.find()) {
-				extension = matcher.group(2);
-				rem = matcher.group(1);
-				logger.trace("extension '" + extension + "' provided.");
-			} else {
-				logger.trace("no extension found. use default. " + extension);
-			}
-
-			cChain = new ArrayList<HashMap<String, String>>();
-			cChain.clear();
-			String cont = null;
-			while (rem.length() > 0) {
-				matcher = regexPath.matcher(rem);
-				if (matcher.find() == false) {
-					break;
-				}
-
-				if (cont == null) {
-					/* controller, check existence of corresponding class. */
-					cont = matcher.group(1);
-					if (getClazz(cPackageName, cont) == null) {
-						String err = "Invalid URI '" + pathInfo + "'. "
-								+ "controller for '" + cont + "' not found.";
-						logger.error(err);
-						throw new ServletException(err);
-					}
-				} else {
-					/* id, add controller-id pair to list. */
-					HashMap<String, String> x = new HashMap<String, String>();
-					x.put(CONTROLLER, cont);
-					x.put(ID, matcher.group(1));
-					cChain.add(x);
-					cont = null;
-				}
-				rem = matcher.group(2);
-				logger.trace("get '{}', remind: '{}'", matcher.group(1), rem);
-			}
-			if (cont != null) {
-				/* add remaining controller without id. */
-				HashMap<String, String> x = new HashMap<String, String>();
-				x.put(CONTROLLER, cont);
-				x.put(ID, "*");
-				cChain.add(x);
-				cont = null;
-			}
-			logger.trace("controller chain: " + cChain.toString());
-
-			return;
+		/* get GET parameters */
+		Enumeration<String> param_names = req.getParameterNames();
+		while (param_names.hasMoreElements()) {
+			String name = param_names.nextElement();
+			params.put(name, req.getParameter(name));
 		}
+		return params;
+	}
+
+	private String getMethod(HttpServletRequest req) {
+		String method;
+
+		switch (req.getMethod()) {
+		case "GET":
+			method = "index";
+			break;
+		case "POST":
+			method = "create";
+			break;
+		default:
+			logger.error("oops! unsupported method '{}'.", req.getMethod());
+			method = "undefind";
+			break;
+		}
+		return method;
+	}
+
+	private HashMap<String, Object> getRoute(HttpServletRequest req)
+			throws ServletException {
+		HashMap<String, Object> route = new HashMap<String, Object>();
+		ArrayList<HashMap<String, String>> route_path;
+
+		route_path = new ArrayList<HashMap<String, String>>();
+		Pattern regexExt = Pattern.compile("(.+)\\.([A-z]+)");
+		Pattern regexPath = Pattern.compile("/([^/?]+)");
+
+		Matcher matcher;
+		String path_remind = req.getPathInfo();
+
+		// get and remove extension first
+		matcher = regexExt.matcher(path_remind);
+		if (matcher.find()) {
+			extension = matcher.group(2);
+			path_remind = matcher.group(1);
+		} else {
+			logger.trace("no extension found. use default ({})", extension);
+		}
+
+		matcher = regexPath.matcher(path_remind);
+		String model = null;
+		while (path_remind.length() > 1 && matcher.hitEnd() == false) {
+			String id = "*";
+			matcher.find();	// find model first.
+			model = matcher.group(1);
+			if (matcher.hitEnd() == false) {
+				matcher.find();	// find id then.
+				id = matcher.group(1);
+			}
+
+			if (getClazz(cPackageName, model) == null) {
+				String error = "Invalid URI '" + req.getPathInfo() + "'. "
+						+ "controller for '" + model + "' not found.";
+				logger.error(error);
+				throw new ServletException(error);
+			}
+			HashMap<String, String> p = new HashMap<String, String>();
+			p.put(MODEL, model);
+			p.put(ID, id);
+			route_path.add(p);
+		}
+		route.put(MODEL, model);
+		route.put(ROUTE_PATH, route_path);
+		route.put(PATH, req.getPathInfo());
+		route.put(PARAMS, getParams(req));
+		route.put(METHOD, getMethod(req));
+		logger.debug("ROUTE to {}", route);
+		return route;
 	}
 
 	@Override
 	public String toString() {
-		return restarVersionString + "\n" + routerVersionString + "\n";
+		return restarVersionString + " " + routerVersionString + " ";
 	}
 
-	private void rootThenAbort(HttpServletRequest req, HttpServletResponse resp)
+	private void responseByExt(HttpServletResponse resp, Object data)
 			throws IOException {
-		logger.trace("--- start ----------------------------------------------");
-		logger.debug("pathinfo: " + req.getPathInfo());
-		if (req.getPathInfo().equals("/")) {
-			/* just show version string if no path given. */
-			PrintWriter out = resp.getWriter();
-			resp.resetBuffer();
-			out.println(this.toString());
-			out.close();
-			return;
+		logger.debug("response as {}...", extension);
+		PrintWriter out = resp.getWriter();
+		resp.resetBuffer();
+
+		if (extension.equals("json")) {
+			resp.setContentType("application/json");
+			out.println(Utils.toJson(data));
 		}
+		out.close();
+	}
+
+	private void doVersionResponse(HttpServletResponse resp)
+			throws IOException {
+		logger.debug("path is '/'. abort with version string");
+
+		HashMap<String, String> data = new HashMap<String, String>();
+		data.put("version", this.toString());
+		data.put("message", "Hello World");
+		responseByExt(resp, data);
 	}
 
 	private void abort500(HttpServletResponse resp, Exception e)
@@ -197,33 +220,27 @@ public abstract class Router extends HttpServlet {
 	}
 
 	protected void doResponse(HttpServletRequest req, HttpServletResponse resp,
-			HashMap<String, Object> params) throws IOException {
+			HashMap<String, Object> params) throws IOException,
+			ServletException {
 		logger.trace("doResponse params: {}", params.toString());
 
 		try {
-			RestRequest resources = new RestRequest(req.getPathInfo());
-			HashMap<String, Object> message = new HashMap<String, Object>();
-			String ctrlr = resources.cChain.get(0).get(CONTROLLER);
-			message.put(PATH, req.getPathInfo());
-			message.put(CHILDREN, resources.cChain);
-			message.put(CONTROLLER, ctrlr);
-			message.put(PARAMS, params);
-			message.put(METHOD, req.getMethod());
-			logger.trace("doResponse message: {}", message.toString());
+			HashMap<String, Object> route = getRoute(req);
+			String model = (String) route.get(MODEL);
 
 			customInit();
 
-			if (extension.compareTo("json") == 0) {
-				if (metaEnabled == true) {
-					HashMap<String, Object> re = new HashMap<String, Object>();
-					re.put("meta", message);
-					re.put("objects", getResponse(message, 0).get(ctrlr));
-					req.setAttribute("data", re);
-				} else {
-					req.setAttribute("data", getResponse(message, 0).get(ctrlr));
-				}
-				req.getRequestDispatcher("/JsonWriter").forward(req, resp);
+			HashMap<String, Object> response = getResponse(route, 0);
+			if (!metaEnabled) {
+				response.put("meta", route);
+				responseByExt(resp, response);
+			} else {
+				responseByExt(resp, response.get(model));
 			}
+		} catch (IndexOutOfBoundsException e) {
+			e.printStackTrace();
+			logger.debug("request is point on ROOT.");
+			doVersionResponse(resp);
 		} catch (NullPointerException e) {
 			logger.error("nullpointer exception!");
 			abort500(resp, e);
@@ -250,66 +267,69 @@ public abstract class Router extends HttpServlet {
 	 * @throws ControllerException
 	 */
 	private HashMap<String, Object>
-			getResponse(HashMap<String, Object> message, int level)
+			getResponse(HashMap<String, Object> route, int level)
 					throws ControllerException {
-		String ctrlrName = "error";
 		HashMap<String, Object> result = new HashMap<String, Object>();
-		ArrayList<HashMap<String, String>> children;
-		children = Utils.toArrayListHashMapStrStr(message.get(CHILDREN));
-		logger.debug("getResponse called with level " + level + ".");
+		String model = "error";
+		ArrayList<HashMap<String, String>> route_path;
+		route_path = Utils.toArrayListHashMapStrStr(route.get(ROUTE_PATH));
+		logger.debug("getResponse lev-{} route_path {}.", level, route_path);
 
-		if (children.size() > level) {
-			ctrlrName = children.get(level).get(CONTROLLER);
-			String id = children.get(level).get(ID);
-			Class<?> cClass = getClazz(cPackageName, ctrlrName);
+		if (route_path.size() > level) {
+			model = route_path.get(level).get(MODEL);
+			String id = route_path.get(level).get(ID);
+			Class<?> cClass = getClazz(cPackageName, model);
 			if (cClass == null) {
-				logger.error("oops! no class for " + ctrlrName
+				logger.error("oops! no class for " + model
 						+ "! it's impossible! what's going on?");
 				return null;
 			}
-			logger.trace("- CZ: " + cClass.getSimpleName() + "/" + id);
 
 			try {
 				HashMap<String, Object> mesg = new HashMap<String, Object>();
 				HashMap<String, Object> rslt = new HashMap<String, Object>();
 				mesg.put(ID, id);
-				mesg.put(PARAMS, message.get(PARAMS));
-				Controller cInst = (Controller) cClass.newInstance();
-				logger.trace("- new instance of " + cInst.getClass().getName());
-				if (message.get(METHOD).equals("GET")) {
-					mesg.put(OPERATION, "index");
-					rslt = cInst.index(mesg);
-				} else if (message.get(METHOD).equals("POST")) {
-					mesg.put(OPERATION, "create");
-					rslt = cInst.create(mesg);
-				} else {
-					logger.error("oops! unsupported method '{}'.",
-							message.get(METHOD));
+				mesg.put(PARAMS, route.get(PARAMS)); // XXX is for last or all?
+				mesg.put(OPERATION, route.get(METHOD));
+
+				Controller ctrlr = (Controller) cClass.newInstance();
+				Class<?>[] params = { HashMap.class };
+				Method m = cClass.getMethod((String) route.get(METHOD), params);
+				logger.debug("invoking {}#{}...", cClass.getName(), m.getName());
+				rslt = Utils.toHashMapStrObj(m.invoke(ctrlr, mesg));
+				if (rslt == null) {
+					logger.error("result is null!");
 					return null;
 				}
-				if (rslt != null) {
-					result.putAll(rslt);
-					try {
-						String rt = rslt.get(ctrlrName).getClass().getName();
-						logger.trace("- result type: " + rt);
-					} catch (NullPointerException e) {
-						logger.trace("oops! result is null!");
-					}
-				} else {
-					logger.error("{}/{} returns null!",
-							cClass.getSimpleName(), mesg.get(OPERATION));
-					return null;
+				result.putAll(rslt);
+				try {
+					String rt = rslt.get(model).getClass().getName();
+					logger.trace("- result type: " + rt);
+				} catch (NullPointerException e) {
+					logger.trace("oops! result is null!");
 				}
 			} catch (InstantiationException | IllegalAccessException e) {
+				e.printStackTrace();
+				return null;
+			} catch (NoSuchMethodException e) {	// for getMethod
+				e.printStackTrace();
+				return null;
+			} catch (SecurityException e) {	// for getMethod
+				e.printStackTrace();
+				return null;
+			} catch (IllegalArgumentException e) {	// for invoke
+				e.printStackTrace();
+				return null;
+			} catch (InvocationTargetException e) {	// for invoke
 				e.printStackTrace();
 				return null;
 			}
 		}
 
-		if (children.size() > level + 1) {
-			logger.trace("callstack: " + children.toString());
+		if (route_path.size() > level + 1) {
+			logger.trace("callstack: " + route_path.toString());
 			Iterator<HashMap<String, Object>> iter = Utils
-					.toArrayListHashMapStrObj(result.get(ctrlrName))
+					.toArrayListHashMapStrObj(result.get(model))
 					.iterator();
 			while (iter.hasNext()) {
 				HashMap<String, Object> elem = iter.next();
@@ -317,9 +337,9 @@ public abstract class Router extends HttpServlet {
 				HashMap<String, Object> params = null;
 
 				HashMap<String, Object> mesg = new HashMap<String, Object>(
-						message);
+						route);
 				params = Utils.toHashMapStrObj(mesg.get(PARAMS));
-				params.put(ctrlrName + "_id", elem.get(ID));
+				params.put(model + "_id", elem.get(ID));
 				rslt = getResponse(mesg, level + 1);
 				if (rslt != null) {
 					elem.putAll(rslt);
@@ -344,7 +364,7 @@ public abstract class Router extends HttpServlet {
 	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
 		HashMap<String, Object> params = new HashMap<String, Object>();
-		rootThenAbort(req, resp);
+		logger.trace("--- start '{}' --------------------", req.getPathInfo());
 
 		/* get GET parameters */
 		Enumeration<String> pNs = req.getParameterNames();
@@ -363,7 +383,7 @@ public abstract class Router extends HttpServlet {
 	protected void doPost(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
 		HashMap<String, Object> params = new HashMap<String, Object>();
-		rootThenAbort(req, resp);
+		logger.trace("--- start '{}' --------------------", req.getPathInfo());
 
 		/* get POST parameters */
 		BufferedReader br = req.getReader();

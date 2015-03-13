@@ -3,6 +3,9 @@ package so.sauru;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
 public final class Utils {
 
 	public static Object toNumIfNum(String str) {
@@ -92,6 +95,25 @@ public final class Utils {
 		if (object == null) {
 			return null;
 		}
-		return (ArrayList<HashMap<String, String>>) object;
+		if (object instanceof ArrayList) {
+			return (ArrayList<HashMap<String, String>>) object;
+		} else {
+			return null;
+		}
+	}
+
+	/**
+	 * convert object(<tt>ArrayList</tt> or <tt>HashMap</tt>) to JSON string.
+	 *
+	 * @param obj
+	 *            source object to be JSON string.
+	 * @return JSON string.
+	 */
+	public static String toJson(Object obj) {
+		Gson gson = new GsonBuilder()
+				.setPrettyPrinting()
+				.disableHtmlEscaping()
+				.create();
+		return gson.toJson(obj);
 	}
 }
