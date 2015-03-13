@@ -68,6 +68,9 @@ public abstract class Router extends HttpServlet {
 	public static final String PARENT = "parent";
 	public static final String PID = "pid";
 
+	private static final String RESP_STATUS = "status";
+	private static final String RESP_ERROR = "error";
+
 	private String packageName;
 	private String cPackageName;
 	private boolean metaEnabled = false;
@@ -85,6 +88,24 @@ public abstract class Router extends HttpServlet {
 	protected boolean setMetaMode(boolean mode) {
 		metaEnabled = mode;
 		return metaEnabled;
+	}
+
+	public class RouterException extends Exception {
+		private static final long serialVersionUID = 1L;
+		private int status = 0;
+
+		public RouterException(String string) {
+			super(string);
+		}
+
+		public RouterException(int status, String string) {
+			super(string);
+			this.status = status;
+		}
+
+		public int getStatus() {
+			return status;
+		}
 	}
 
 	private Class<?> getClazz(String pName, String cName) {
@@ -130,7 +151,7 @@ public abstract class Router extends HttpServlet {
 	}
 
 	private HashMap<String, Object> getRoute(HttpServletRequest req)
-			throws ServletException {
+			throws RouterException {
 		HashMap<String, Object> route = new HashMap<String, Object>();
 		ArrayList<HashMap<String, String>> route_path;
 
@@ -150,10 +171,17 @@ public abstract class Router extends HttpServlet {
 			logger.trace("no extension found. use default ({})", extension);
 		}
 
+		// FLOW-INFO set router elements from request first...
+		route.put(PATH, req.getPathInfo());
+		route.put(PARAMS, getParams(req));
+		route.put(METHOD, getMethod(req));
+
 		matcher = regexPath.matcher(path_remind);
 		String model = null;
+		Class<?> currModelClass = null;
 		while (path_remind.length() > 1 && matcher.hitEnd() == false) {
 			String id = "*";
+			Class<?> modelClass;
 			matcher.find();	// find model first.
 			model = matcher.group(1);
 			if (matcher.hitEnd() == false) {
@@ -161,22 +189,44 @@ public abstract class Router extends HttpServlet {
 				id = matcher.group(1);
 			}
 
-			if (getClazz(cPackageName, model) == null) {
-				String error = "Invalid URI '" + req.getPathInfo() + "'. "
-						+ "controller for '" + model + "' not found.";
-				logger.error(error);
-				throw new ServletException(error);
+			modelClass = getClazz(cPackageName, model);
+			if (modelClass != null) {
+				currModelClass = modelClass;
+				HashMap<String, String> p = new HashMap<String, String>();
+				p.put(MODEL, model);
+				p.put(ID, id);
+				route_path.add(p);
+				route.put(MODEL, model);
+				continue;
 			}
+
+			if (currModelClass != null && id.equals("*") && matcher.hitEnd()) {
+				logger.debug("matching class not found for model '{}'.", model);
+				logger.debug("finding method '{}' on current model...", model);
+				try {
+					Class<?>[] params = { HashMap.class };
+					Method m = currModelClass.getMethod(model, params);
+					route.put(METHOD, model);
+					logger.debug("method found: {}", m.getName());
+					continue;
+				} catch (Exception e) {
+					e.printStackTrace();
+					logger.error("");
+				}
+			}
+
+			String error = "Invalid URI '" + req.getPathInfo() + "'. "
+					+ "controller for '" + model + "' not found.";
+			logger.error(error);
+			throw new RouterException(404, error);
+			/*
 			HashMap<String, String> p = new HashMap<String, String>();
 			p.put(MODEL, model);
 			p.put(ID, id);
 			route_path.add(p);
+			*/
 		}
-		route.put(MODEL, model);
 		route.put(ROUTE_PATH, route_path);
-		route.put(PATH, req.getPathInfo());
-		route.put(PARAMS, getParams(req));
-		route.put(METHOD, getMethod(req));
 		logger.debug("ROUTE to {}", route);
 		return route;
 	}
@@ -191,6 +241,12 @@ public abstract class Router extends HttpServlet {
 		logger.debug("response as {}...", extension);
 		PrintWriter out = resp.getWriter();
 		resp.resetBuffer();
+		if (data instanceof HashMap) {
+			HashMap<String, Object> d = Utils.toHashMapStrObj(data);
+			if (d.containsKey(RESP_STATUS)) {
+				resp.setStatus((int) d.get(RESP_STATUS));
+			}
+		}
 
 		if (extension.equals("json")) {
 			resp.setContentType("application/json");
@@ -209,19 +265,21 @@ public abstract class Router extends HttpServlet {
 		responseByExt(resp, data);
 	}
 
-	private void abort500(HttpServletResponse resp, Exception e)
-			throws IOException {
-		PrintWriter out = resp.getWriter();
-		resp.setStatus(500);
-		out.println(e.getMessage());
+	private void abortWithStatus(HttpServletResponse resp, Exception e,
+			int status, String error) throws IOException {
+		HashMap<String, Object> data = new HashMap<String, Object>();
+		data.put(RESP_STATUS, status);
+		data.put(RESP_ERROR, error);
+		data.put("reason", e.getMessage());
+
 		e.printStackTrace();
-		logger.error("uncontrollable error! abort with status 500");
-		out.close();
+		logger.error(data.get("error") + " abort with " + status);
+
+		responseByExt(resp, data);
 	}
 
 	protected void doResponse(HttpServletRequest req, HttpServletResponse resp,
-			HashMap<String, Object> params) throws IOException,
-			ServletException {
+			HashMap<String, Object> params) throws IOException {
 		logger.trace("doResponse params: {}", params.toString());
 
 		try {
@@ -239,17 +297,15 @@ public abstract class Router extends HttpServlet {
 			}
 		} catch (IndexOutOfBoundsException e) {
 			e.printStackTrace();
-			logger.debug("request is point on ROOT.");
+			logger.debug("request points on ROOT.");
 			doVersionResponse(resp);
 		} catch (NullPointerException e) {
-			logger.error("nullpointer exception!");
-			abort500(resp, e);
-		} catch (ServletException e) {
-			logger.error("servlet exception: ", e.getMessage());
-			abort500(resp, e);
+			abortWithStatus(resp, e, 500, "NullPointer Exception!");
+		} catch (RouterException e) {
+			abortWithStatus(resp, e, e.getStatus(), "Router Exception!");
 		} catch (ControllerException e) {
 			logger.error("controller exception: ", e.getMessage());
-			abort500(resp, e);
+			abortWithStatus(resp, e, 500, "Controller Exception!");
 		}
 	}
 
