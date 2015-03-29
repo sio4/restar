@@ -102,6 +102,11 @@ public final class Utils {
 		}
 	}
 
+	public static String asSingleName(String plural) {
+		// FIXME quick and dirty. but working for current usage...
+		return plural.substring(0, plural.length() - 1);
+	}
+
 	/**
 	 * convert object(<tt>ArrayList</tt> or <tt>HashMap</tt>) to JSON string.
 	 *

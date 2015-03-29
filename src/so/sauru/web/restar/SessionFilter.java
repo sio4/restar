@@ -39,7 +39,7 @@ public class SessionFilter implements Filter {
 			throw new ServletException("cannot initiate session fileter.");
 		}
 		logger.info("session filter initiated successfully.");
-		logger.debug("- config: {}, {}", loginPage, callBack.getName());
+		logger.debug("  with config: {}, {}", loginPage, callBack.getName());
 	}
 
 	@Override
@@ -54,6 +54,14 @@ public class SessionFilter implements Filter {
 
 		try {
 			if (callBack.newInstance().isValid(req) == true) {
+				((HttpServletResponse) response).addHeader(
+						"Access-Control-Allow-Origin", "*");
+				((HttpServletResponse) response).addHeader(
+						"Access-Control-Allow-Credentials", "true");
+				((HttpServletResponse) response).addHeader(
+						"Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
+				((HttpServletResponse) response).addHeader(
+						"Access-Control-Allow-Headers", "Content-Type");
 				logger.trace("session validated. next...");
 				next.doFilter(request, response);
 				return;
@@ -61,7 +69,7 @@ public class SessionFilter implements Filter {
 		} catch (IllegalAccessException | InstantiationException e) {
 			e.printStackTrace();
 		}
-		logger.debug("invalid session. forward to login page: {}", req.toString());
+		logger.debug("invalid session. forward to: {}", req.toString());
 		req.getRequestDispatcher(loginPage).forward(req, resp);
 	}
 

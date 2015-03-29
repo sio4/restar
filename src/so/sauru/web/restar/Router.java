@@ -30,7 +30,6 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -228,7 +227,7 @@ public abstract class Router extends HttpServlet {
 			*/
 		}
 		route.put(ROUTE_PATH, route_path);
-		logger.debug("ROUTE to {}", route);
+		logger.info("preparing request... route={}", route);
 		return route;
 	}
 
@@ -288,6 +287,11 @@ public abstract class Router extends HttpServlet {
 			route.put(PARAMS, params);
 			String model = (String) route.get(MODEL);
 
+			if (model == null) {
+				doVersionResponse(resp);
+				return;
+			}
+
 			customInit();
 
 			HashMap<String, Object> response = getResponse(route, 0);
@@ -295,12 +299,12 @@ public abstract class Router extends HttpServlet {
 				response.put("meta", route);
 				responseByExt(resp, response);
 			} else {
-				responseByExt(resp, response.get(model));
+				if (response.containsKey(model)) {
+					responseByExt(resp, response.get(model));
+				} else if (response.containsKey(Utils.asSingleName(model))) {
+					responseByExt(resp, response.get(Utils.asSingleName(model)));
+				}
 			}
-		} catch (IndexOutOfBoundsException e) {
-			e.printStackTrace();
-			logger.debug("request points on ROOT.");
-			doVersionResponse(resp);
 		} catch (NullPointerException e) {
 			abortWithStatus(resp, e, 500, "NullPointer Exception!");
 		} catch (RouterException e) {
@@ -329,9 +333,10 @@ public abstract class Router extends HttpServlet {
 					throws ControllerException {
 		HashMap<String, Object> result = new HashMap<String, Object>();
 		String model = "error";
+		String key = "error";
 		ArrayList<HashMap<String, String>> route_path;
 		route_path = Utils.toArrayListHashMapStrStr(route.get(ROUTE_PATH));
-		logger.debug("getResponse lev-{} route_path {}.", level, route_path);
+		logger.trace("getResponse lev-{} route_path {}.", level, route_path);
 
 		if (route_path.size() > level) {
 			model = route_path.get(level).get(MODEL);
@@ -343,6 +348,11 @@ public abstract class Router extends HttpServlet {
 				return null;
 			}
 
+			if (id.equals("*")) {
+				key = model;
+			} else {
+				key = Utils.asSingleName(model);
+			}
 			try {
 				HashMap<String, Object> mesg = new HashMap<String, Object>();
 				HashMap<String, Object> rslt = new HashMap<String, Object>();
@@ -353,18 +363,30 @@ public abstract class Router extends HttpServlet {
 				Controller ctrlr = (Controller) cClass.newInstance();
 				Class<?>[] params = { HashMap.class };
 				Method m = cClass.getMethod((String) route.get(METHOD), params);
-				logger.debug("invoking {}#{}...", cClass.getName(), m.getName());
+				logger.trace("invoking {}#{}...", cClass.getName(), m.getName());
 				rslt = Utils.toHashMapStrObj(m.invoke(ctrlr, mesg));
 				if (rslt == null) {
 					logger.error("result is null!");
 					return null;
 				}
-				result.putAll(rslt);
+				if (id.equals("*")) {
+					logger.trace("add all rslt set to result...");
+					result.putAll(rslt);
+				} else {
+					if (((ArrayList<?>) rslt.get(model)).size() == 1) {
+						logger.trace("add only first result to {}...", key);
+						result.put(key, ((ArrayList<?>) rslt.get(model)).get(0));
+					} else {
+						logger.warn("oops! size is {} instead of 1",
+								((ArrayList<?>) rslt.get(model)).size());
+						result.put(key, new ArrayList<Object>());
+					}
+				}
 				try {
 					String rt = rslt.get(model).getClass().getName();
-					logger.trace("- result type: " + rt);
+					logger.debug("- result type: " + rt);
 				} catch (NullPointerException e) {
-					logger.trace("oops! result is null!");
+					logger.error("oops! result is null!");
 				}
 			} catch (InstantiationException | IllegalAccessException e) {
 				e.printStackTrace();
@@ -385,26 +407,21 @@ public abstract class Router extends HttpServlet {
 		}
 
 		if (route_path.size() > level + 1) {
-			logger.trace("callstack: " + route_path.toString());
-			Iterator<HashMap<String, Object>> iter = Utils
-					.toArrayListHashMapStrObj(result.get(model))
-					.iterator();
-			while (iter.hasNext()) {
-				HashMap<String, Object> elem = iter.next();
-				HashMap<String, Object> rslt = null;
-				HashMap<String, Object> params = null;
+			HashMap<String, Object> parent = Utils.toHashMapStrObj(result.get(key));
+			HashMap<String, Object> rslt = null;
+			HashMap<String, Object> params = null;
 
-				HashMap<String, Object> mesg = new HashMap<String, Object>(
-						route);
-				params = Utils.toHashMapStrObj(mesg.get(PARAMS));
-				params.put(model + "_id", elem.get(ID));
-				rslt = getResponse(mesg, level + 1);
-				if (rslt != null) {
-					elem.putAll(rslt);
-				} else {
-					elem.put("ERROR", rslt);
-					logger.error("result is null.");
-				}
+			HashMap<String, Object> mesg = new HashMap<String, Object>(
+					route);
+			params = Utils.toHashMapStrObj(mesg.get(PARAMS));
+			params.put(key + "_id", parent.get(ID));
+			rslt = getResponse(mesg, level + 1);
+			if (rslt != null) {
+				parent.putAll(rslt);
+				result.putAll(rslt);
+			} else {
+				parent.put("ERROR", rslt);
+				logger.error("result is null.");
 			}
 		}
 		return result;
