@@ -142,6 +142,9 @@ public abstract class Router extends HttpServlet {
 		case "POST":
 			method = "create";
 			break;
+		case "PUT":
+			method = "update";
+			break;
 		default:
 			logger.error("oops! unsupported method '{}'.", req.getMethod());
 			method = "undefind";
@@ -174,7 +177,7 @@ public abstract class Router extends HttpServlet {
 		// FLOW-INFO set router elements from request first...
 		route.put(PATH, req.getPathInfo());
 		route.put(PARAMS, getParams(req));	// FIXME buggy
-		route.put(METHOD, getMethod(req));
+		route.put(METHOD, getMethod(req));	// FIXME method check
 
 		matcher = regexPath.matcher(path_remind);
 		String model = null;
@@ -481,8 +484,22 @@ public abstract class Router extends HttpServlet {
 	@Override
 	protected void doPut(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException {
-		// TODO Auto-generated method stub
-		super.doPut(req, resp);
+		HashMap<String, Object> params = new HashMap<String, Object>();
+		logger.trace("--- start '{}' --------------------", req.getPathInfo());
+
+		/* get POST parameters */
+		BufferedReader br = req.getReader();
+		StringBuilder sb = new StringBuilder();
+		String json;
+		while ((json = br.readLine()) != null) {
+			sb.append(json);
+		}
+		json = sb.toString();
+		logger.debug("json: {}", json);
+		Gson g = new Gson();
+		params = Utils.toHashMapStrObj(g.fromJson(json, params.getClass()));
+
+		doResponse(req, resp, params);
 	}
 
 	/**
