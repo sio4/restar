@@ -3,8 +3,16 @@ package so.sauru.web.restar;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 public class SessionHandler {
-	HttpSession sess = null;
+	protected HttpSession sess = null;
+	protected Logger logger = null;
+
+	public SessionHandler () {
+		logger = LogManager.getLogger(getClass().getSimpleName());
+	}
 
 	public boolean isValid(HttpServletRequest req) {
 		sess = req.getSession();

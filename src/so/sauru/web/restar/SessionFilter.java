@@ -1,6 +1,7 @@
 package so.sauru.web.restar;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -17,6 +18,8 @@ import org.apache.logging.log4j.Logger;
 public class SessionFilter implements Filter {
 	private Class<? extends SessionHandler> callBack = null;
 	private static String loginPage = "/login";
+	private static ArrayList<String> exclude = new ArrayList<String>();
+	private static ArrayList<String> include = new ArrayList<String>();
 	private Logger logger = null;
 
 	@SuppressWarnings("unchecked")
@@ -26,6 +29,20 @@ public class SessionFilter implements Filter {
 		String lp = config.getInitParameter("loginPage");
 		if (lp != null && !lp.isEmpty()) {
 			loginPage = lp;
+		}
+
+		String ex = config.getInitParameter("exclude");
+		if (ex != null && !ex.isEmpty()) {
+			for (String e : ex.split(" ")) {
+				exclude.add(e);
+			}
+		}
+
+		String in = config.getInitParameter("include");
+		if (in != null && !in.isEmpty()) {
+			for (String e : in.split(" ")) {
+				include.add(e);
+			}
 		}
 
 		String shn = config.getInitParameter("sessionHandler");
@@ -40,6 +57,8 @@ public class SessionFilter implements Filter {
 		}
 		logger.info("session filter initiated successfully.");
 		logger.debug("  with config: {}, {}", loginPage, callBack.getName());
+		logger.debug("  with exclude path: {}", exclude.toString());
+		logger.debug("  with include path: {}", include.toString());
 	}
 
 	@Override
@@ -47,6 +66,14 @@ public class SessionFilter implements Filter {
 			FilterChain next) throws IOException, ServletException {
 		HttpServletRequest req = (HttpServletRequest) request;
 		HttpServletResponse resp = (HttpServletResponse) response;
+		String path = req.getRequestURI();
+
+		// Handle exception first.
+		if (isExcluded(path)) {
+			setAccessHeaders(resp);
+			next.doFilter(request, response);
+			return;
+		}
 
 		if (callBack == null) {
 			throw new ServletException("configuration error: callBack");
@@ -54,23 +81,40 @@ public class SessionFilter implements Filter {
 
 		try {
 			if (callBack.newInstance().isValid(req) == true) {
-				((HttpServletResponse) response).addHeader(
-						"Access-Control-Allow-Origin", "*");
-				((HttpServletResponse) response).addHeader(
-						"Access-Control-Allow-Credentials", "true");
-				((HttpServletResponse) response).addHeader(
-						"Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
-				((HttpServletResponse) response).addHeader(
-						"Access-Control-Allow-Headers", "Content-Type");
 				logger.trace("session validated. next...");
+				setAccessHeaders(resp);
 				next.doFilter(request, response);
 				return;
 			}
 		} catch (IllegalAccessException | InstantiationException e) {
 			e.printStackTrace();
 		}
-		logger.debug("invalid session. forward to: {}", req.toString());
+		logger.debug("invalid session. forward to: {}", loginPage);
+		req.setAttribute("origin", path);
 		req.getRequestDispatcher(loginPage).forward(req, resp);
+	}
+
+	private boolean isExcluded(String path) {
+		for (String p : include) {
+			if (path.startsWith(p)) {
+				logger.debug("path {} match on {}. included.", path, p);
+				return false;
+			}
+		}
+		for (String p : exclude) {
+			if (path.startsWith(p)) {
+				logger.debug("path {} match on {}. excluded.", path, p);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void setAccessHeaders(HttpServletResponse resp) {
+		resp.addHeader("Access-Control-Allow-Origin", "*");
+		resp.addHeader("Access-Control-Allow-Credentials", "true");
+		resp.addHeader("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
+		resp.addHeader("Access-Control-Allow-Headers", "Content-Type");
 	}
 
 	public void destroy() {
