@@ -66,6 +66,7 @@ public abstract class Router extends HttpServlet {
 	public static final String ID = "id";
 	public static final String PARENT = "parent";
 	public static final String PID = "pid";
+	public static final String SESSION = "session";
 
 	private static final String RESP_STATUS = "status";
 	private static final String RESP_ERROR = "error";
@@ -297,6 +298,7 @@ public abstract class Router extends HttpServlet {
 
 			customInit();
 
+			route.put(SESSION, req.getSession());
 			HashMap<String, Object> response = getResponse(route, 0);
 			if (metaEnabled) {
 				response.put("meta", route);
@@ -362,6 +364,7 @@ public abstract class Router extends HttpServlet {
 				mesg.put(ID, id);
 				mesg.put(PARAMS, route.get(PARAMS)); // XXX is for last or all?
 				mesg.put(OPERATION, route.get(METHOD));
+				mesg.put(SESSION, route.get(SESSION));
 
 				Controller ctrlr = (Controller) cClass.newInstance();
 				Class<?>[] params = { HashMap.class };

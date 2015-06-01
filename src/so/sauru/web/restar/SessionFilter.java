@@ -90,6 +90,7 @@ public class SessionFilter implements Filter {
 			e.printStackTrace();
 		}
 		logger.debug("invalid session. forward to: {}", loginPage);
+		resp.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 		req.setAttribute("origin", path);
 		req.getRequestDispatcher(loginPage).forward(req, resp);
 	}
